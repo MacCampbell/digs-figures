@@ -1,0 +1,242 @@
+---
+title: "100-time-tree"
+output: html_document
+date: "2023-08-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(ggtree)
+library(phytools)
+library(ggrepel)
+library(ggpubr)
+library(viridis)
+```
+
+Generate taxon list
+
+```{r}
+meta<-read.csv("data/loci.csv")
+meta
+```
+
+```{r}
+organisms<-meta %>% select(organism) %>% unique()
+organisms$organism<-gsub("_"," ",organisms$organism)
+organisms
+write_tsv(organisms, col_names = FALSE, file="outputs/100/species-list-unedited.tsv")
+```
+
+79 Mismatches
+
+Thylacine cynocephalus (not found in NCBI taxonomy)
+Equus ferus thistlecreek (not found in NCBI taxonomy)
+Nannopterum brasilianus (not found in NCBI taxonomy)
+Scyliorhinus torazame (replaced with Carcharhinus leucas)
+Guentherus altivela (replaced with Ateleopus japonicus)
+Paramormyrops kingsleyae (replaced with Paramormyrops curvifrons)
+Phrynoglossus myanhessei (replaced with Occidozyga laevis)
+Bombina variegata variegata (replaced with Bombina variegata)
+Bettongia penicillata ogilbyi (replaced with Bettongia penicillata)
+Solenodon paradoxus woodi (replaced with Solenodon paradoxus)
+Prionailurus bengalensis euptilurus (replaced with Prionailurus bengalensis)
+Mustela putorius furo (replaced with Mustela putorius)
+Ailurus fulgens (replaced with Ailurus)
+Ursus arctos horribilis (replaced with Ursus arctos)
+Equus asinus somalicus (replaced with Equus asinus)
+Equus africanus asinus (replaced with Equus asinus)
+Equus burchellii boehmi (replaced with Equus quagga)
+Equus zebra hartmannae (replaced with Equus zebra)
+Dicerorhinus sumatrensis sumatrensis (replaced with Dicerorhinus sumatrensis)
+Ceratotherium simum cottoni (replaced with Ceratotherium simum)
+Lama guanicoe cacsilensis (replaced with Lama guanicoe)
+Neophocaena asiaeorientalis (replaced with Neophocaena)
+Kobus leche leche (replaced with Kobus leche)
+Hippotragus niger niger (replaced with Hippotragus niger)
+Cervus hanglu yarkandensis (replaced with Cervus hanglu)
+Cervus elaphus hippelaphus (replaced with Cervus elaphus)
+Pteronotus parnellii (replaced with Pteronotus davyi)
+Murina aurata feae (replaced with Murina aurata)
+Peromyscus maniculatus bairdii (replaced with Peromyscus maniculatus)
+Peromyscus polionotus subgriseus (replaced with Peromyscus polionotus)
+Colobus angolensis palliatus (replaced with Colobus angolensis)
+Tupaia chinensis (replaced with Tupaia glis)
+Notechis scutatus (replaced with Notechis)
+Pituophis catenifer pumilus (replaced with Pituophis catenifer)
+Diadophis punctatus similis (replaced with Diadophis punctatus)
+Vipera berus berus (replaced with Vipera berus)
+Varanus salvator macromaculatus (replaced with Varanus salvator)
+Elgaria multicarinata webbii (replaced with Elgaria multicarinata)
+Nothoprocta perdicaria (replaced with Nothoprocta)
+Tinamus guttatus (replaced with Tinamus)
+Apteryx australis mantelli (replaced with Apteryx mantelli)
+Chaetura pelagica (replaced with Chaetura)
+Antrostomus carolinensis (replaced with Lyncornis macrotis)
+Egretta garzetta (replaced with Egretta novaehollandiae)
+Pelecanus crispus (replaced with Pelecanus occidentalis)
+Limosa lapponica baueri (replaced with Limosa lapponica)
+Recurvirostra avosetta (replaced with Recurvirostra)
+Phoenicopterus ruber (replaced with Phoenicopterus)
+Merops nubicus (replaced with Merops apiaster)
+Colius striatus (replaced with Colius)
+Strix occidentalis caurina (replaced with Strix uralensis)
+Athene cunicularia (replaced with Athene)
+Aquila chrysaetos canadensis (replaced with Aquila chrysaetos)
+Phylloscopus trochiloides viridanus (replaced with Phylloscopus trochiloides)
+Corvus cornix cornix (replaced with Corvus cornix)
+Lonchura striata domestica (replaced with Lonchura striata)
+Mesoclemmys tuberculata (replaced with Phrynops hilarii)
+Malaclemys terrapin terrapin (replaced with Malaclemys terrapin)
+Trachemys scripta (replaced with Trachemys dorbigni)
+Cebus capucinus imitator (no substitute found)
+Eulemur fulvus (no substitute found)
+Eidolon dupreanum (no substitute found)
+Gopherus evgoodei (no substitute found)
+Cercopithecus albogularis (no substitute found)
+Canis lupus dingo (no substitute found)
+Pteropus pselaphon (no substitute found)
+Eurynorhynchus pygmeus (no substitute found)
+Oryzias melastigma (no substitute found)
+Psittacula krameri (no substitute found)
+Eptesicus fuscus (no substitute found)
+Hipposideros pendleburyi (no substitute found)
+Phalacrocorax harrisi (no substitute found)
+Phalacrocorax carbo (no substitute found)
+Urile pelagicus (no substitute found)
+Miniopterus schreibersii (no substitute found)
+Ardeotis arabs (no substitute found)
+Bubo blakistoni (no substitute found)
+Anabarilius grahami (no substitute found)
+Nannopterum harrisi (no substitute found)
+
+
+## Moving forward without resolving names
+
+```{r}
+tree
+```
+```{r}
+data<-meta 
+data$Species<-gsub("_"," ",data$organism)
+data<-as_tibble(data)
+data$locus_name<-data$assigned_name
+list<-split(data, f=data$locus_name)
+```
+
+
+```{r}
+writeList<-function(table) {
+  species<-as_tibble(unique(table$Species))
+  if(length(species$value) > 1) {
+  write_tsv(species, col_names = FALSE, paste0("outputs/100/lists/",unique(table$locus_name),".tsv"))
+  }
+}
+```
+
+This takes a while, so commenting out.     
+
+```{r, eval=FALSE}
+lapply(list, writeList)
+```
+
+
+## Tree   
+
+```{r}
+tree<-read.tree("outputs/100/species-list-unedited.nwk")
+t<-ggtree(tree)
+```
+
+```{r}
+#Making tip ages = 0 
+t$data<-t$data %>% mutate(Age=max(x)-x)
+
+t + geom_tiplab(size=2) +
+  geom_treescale()+
+  xlim(0,600)+
+  geom_nodelab(aes(label=round(Age,2)), hjust=0, size=2)
+```
+
+```{r}
+#Making "Taxa" for tip labs and calculate number of taxa
+#Exlude unassigned "NK" locus_names
+#filter to tips in tree
+treetips<-t$data %>% filter(isTip==TRUE) %>% select(label)
+
+df<-data %>% filter(locus_name != "NK") %>% unique() %>%
+  mutate(Delim=gsub(" ","_",Species)) %>%
+  filter(Delim %in% treetips$label) %>%
+  group_by(locus_name) %>% mutate(Taxa=paste(Delim, collapse=" "))  %>% mutate(Count=n())
+
+#getting min age of nodes
+df2<-df %>% mutate(node = as.numeric(ifelse(Count > 1, findMRCA(tree, tips=strsplit(Taxa, " ")[[1]]), NA)))
+df3<-left_join(df2, t$data, by="node")
+df3$Age<-replace_na(df3$Age, 0)
+
+
+#Summarize min age of nodes
+df3 %>% select(locus_name, Age) %>% unique()
+```
+
+```{r}
+annotations<-df3 %>% select(locus_name, node, Age, x, y, host_class, virus_family, virus_genus) %>% unique()
+
+minAges<-annotations %>% rename(MinimumAge=Age) %>% select(virus_genus, locus_name, MinimumAge, host_class)
+
+write_csv(minAges, "outputs/100/min-ages.csv")
+```
+
+
+Annotating tree
+
+```{r}
+fact<-8
+bigdf<-left_join(data, t$data, by=c("organism"="label"))  %>%
+  drop_na() %>% #Some species not in timetree, subspecies added to newick string where appropriate
+  select(Species, organism, virus_family, virus_genus, x, y, locus_name) %>%
+  unique() %>% select(-locus_name) %>% 
+  group_by(Species, organism, virus_family, virus_genus, x, y) %>%
+  summarize(Count=n()) %>%
+  unique() %>%
+  mutate(newX = ifelse(virus_family=="Bornaviridae", x+fact,
+                ifelse(virus_family=="Hepadnaviridae", x+2*fact,
+                ifelse(virus_family=="Parvoviridae", x+3*fact,
+                ifelse(virus_family=="Circoviridae", x+4*fact,
+                ifelse(virus_family=="Filoviridae", x+5*fact,
+                ifelse(virus_family=="Chuviridae", x+6*fact,
+                ifelse(virus_family=="Paramyxoviridae", x+7*fact,
+                ifelse(virus_family=="Flaviviridae", x+8*fact,
+                ifelse(virus_family=="Retroelement", x+9*fact))))))))))
+
+bigdf$virus_family<-factor(bigdf$virus_family, levels=c( "Hepadnaviridae","Circoviridae", "Parvoviridae","Retroelement","Flaviviridae",
+                                                         "Bornaviridae","Chuviridae","Filoviridae","Paramyxoviridae"))
+```
+
+```{r}
+nodes<-filter(annotations, node != "NA")
+
+nodes$virus_family<-factor(nodes$virus_family, levels=c( "Hepadnaviridae","Circoviridae", "Parvoviridae","Retroelement","Flaviviridae",
+                                                         "Bornaviridae","Chuviridae","Filoviridae","Paramyxoviridae"))
+tips<-filter(annotations, Age == 0)
+tipSpecies<-df3 %>% filter(locus_name %in% tips$locus_name)
+
+
+v<-t + xlim(0,600)+
+  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=4, alpha=0.75, pch=23, position = "jitter") +
+  geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
+  theme_tree2()+
+  theme(axis.title.x = element_text(size=14)) +
+  theme(legend.position = "right") +
+  scale_x_continuous(name="", breaks=c(063, 263, 463),
+                     labels=c(500,300,100) )+
+  #coord_cartesian(xlim = c(373,550)) + #was 323
+  scale_fill_viridis_d(option = "H", name="Virus Family" ) 
+
+v
+
+ggsave("outputs/100/starting-tree.pdf", width=12, height=24)
+```
