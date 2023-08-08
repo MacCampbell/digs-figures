@@ -139,6 +139,8 @@ annotations<-df3 %>% select(locus_name, node, Age, x, y, host_class, virus_famil
 minAges<-annotations %>% rename(MinimumAge=Age) %>% select(virus_genus, locus_name, MinimumAge, host_class)
 
 write_csv(minAges, "outputs/100/min-ages.csv")
+write_csv(minAges, "tree-figure/min-ages.csv")
+
 ```
 
 
@@ -180,7 +182,7 @@ tipSpecies<-df3 %>% filter(locus_name %in% tips$locus_name)
 
 
 v<-t + xlim(0,600)+
-  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=4, alpha=0.75, pch=23, position = "jitter") +
+  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
   geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
   theme_tree2()+
   theme(axis.title.x = element_text(size=14)) +
@@ -237,7 +239,7 @@ off<-42
 
 ```{r}
 x<-t + xlim(0,600)+
-  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=4, alpha=0.75, pch=23, position = "jitter") +
+  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
   geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
   theme_tree2()+
   theme(axis.title.x = element_text(size=14)) +
@@ -277,7 +279,7 @@ singles
 
 ```{r}
 y<-t + xlim(0,600)+
-  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=4, alpha=0.75, pch=23, position = "jitter") +
+  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
   geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
   theme_tree2()+
   theme(axis.title.x = element_text(size=14)) +
