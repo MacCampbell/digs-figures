@@ -23,7 +23,8 @@ Correcting names from outputs/100/unresolved-names.txt
 Dropping those without NCBI taxonomy, but otherwise matching.    
 
 ```{r}
-meta<-read.csv("data/loci.csv")
+#meta<-read.csv("data/loci.csv")
+meta<-read.csv("data/input-eves-all-08212023-edited.csv")
 meta
 ```
 
@@ -64,7 +65,9 @@ Canis lupus dingo (no substitute found)
 Miniopterus schreibersii (no substitute found)
 Gopherus evgoodei (no substitute found)
 Nannopterum harrisi (no substitute found)
- 
+
+(note, when redoing this on 08212023 I still had 709 unique names)
+
 ## Moving forward without resolving names
 
 ```{r}
@@ -99,7 +102,7 @@ lapply(list, writeList)
 ```{r}
 #tree<-read.tree("outputs/100/species-list-unedited.nwk")
 tree<-read.tree("outputs/100/species-list-edited-for-timetree.nwk")
-t<-ggtree(tree)
+t<-ggtree(tree, color="grey50")
 ```
 
 ```{r}
@@ -121,16 +124,26 @@ treetips<-t$data %>% filter(isTip==TRUE) %>% select(label)
 df<-data %>% filter(locus_name != "NK") %>% unique() %>%
   mutate(Delim=gsub(" ","_",Species)) %>%
   filter(Delim %in% treetips$label) %>%
-  group_by(locus_name) %>% mutate(Taxa=paste(Delim, collapse=" "))  %>% mutate(Count=n())
+  group_by(locus_name) %>% mutate(Taxa=paste(Delim, collapse=" "))  %>% mutate(Count=n()) %>% #Ned to find loci occurring in > 1 species, not just > 1 in a species 
+  group_by(locus_name) %>% mutate(TaxonCount=length(unique(Species))) %>% ungroup() %>%
+  group_by(locus_name)
+
+
 
 #getting min age of nodes
 df2<-df %>% mutate(node = as.numeric(ifelse(Count > 1, findMRCA(tree, tips=strsplit(Taxa, " ")[[1]]), NA)))
 df3<-left_join(df2, t$data, by="node")
 df3$Age<-replace_na(df3$Age, 0)
 
+df3 <- df3 %>% mutate(NewAge=ifelse(TaxonCount > 1, Age, 0))
 
 #Summarize min age of nodes
-df3 %>% select(locus_name, Age) %>% unique()
+df3 %>% select(locus_name, Age, NewAge) %>% unique() %>% arrange(-Age, NewAge)
+
+df3<-df3 %>% select(-Age) %>% rename(Age=NewAge)
+#Check to make sure some loci with >1 occurrence in 1 organism don't have duplicates treated as loci with old ages
+df %>% filter(Species=="Eptatretus_burgeri") %>% select(Species, Count, TaxonCount)
+df3 %>% filter(Species=="Eptatretus_burgeri") %>% select(Species, Count, TaxonCount, Age)
 ```
 
 ```{r}
@@ -139,8 +152,9 @@ annotations<-df3 %>% select(locus_name, node, Age, x, y, host_class, virus_famil
 minAges<-annotations %>% rename(MinimumAge=Age) %>% select(virus_genus, locus_name, MinimumAge, host_class)
 
 write_csv(minAges, "outputs/100/min-ages.csv")
-write_csv(minAges, "tree-figure/min-ages.csv")
+write_csv(minAges %>% arrange(-MinimumAge), "tree-figure/min-ages.csv")
 
+minAges %>% arrange(-MinimumAge)
 ```
 
 
@@ -173,7 +187,7 @@ bigdf
 ```
 
 ```{r}
-nodes<-filter(annotations, node != "NA")
+nodes<-filter(annotations %>% select(-host_class) %>% unique(), node != "NA")
 
 #nodes$virus_family<-factor(nodes$virus_family, levels=c( "Hepadnaviridae","Circoviridae", "Parvoviridae","Retroelement","Flaviviridae",
  #                                                        "Bornaviridae","Chuviridae","Filoviridae","Paramyxoviridae"))
@@ -239,7 +253,7 @@ off<-42
 
 ```{r}
 x<-t + xlim(0,600)+
-  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
+  geom_point(data = nodes %>% filter(Age !=0), aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
   geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
   theme_tree2()+
   theme(axis.title.x = element_text(size=14)) +
@@ -277,9 +291,10 @@ singles<-ctips %>% select(parent, host_class) %>% rename(single=parent) %>% left
 singles
 ```
 
+
 ```{r}
 y<-t + xlim(0,600)+
-  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
+  geom_point(data = nodes %>% filter(Age !=0), aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
   geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
   theme_tree2()+
   theme(axis.title.x = element_text(size=14)) +
@@ -296,3 +311,49 @@ ggsave("tree-figure/starting-tree-with-node-labels.pdf", width=12, height=24)
 
 ```
 
+
+Make nodes proportional to occurrences
+```{r}
+summed<-nodes %>% filter(Age !=0) %>% ungroup() %>% group_by(virus_family, node, Age, x, y) %>% summarize(Count=n())
+
+u<-ggtree(tree, color="grey50", size=0.25)
+
+```
+
+```{r}
+z<-u + xlim(0,600)+
+  geom_point(data = summed, aes(x=x, y=y, fill=virus_family, size=Count), alpha=0.75, pch=23, position="jitter") +
+  geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
+  theme_tree2()+
+  theme(axis.title.x = element_text(size=14)) +
+  theme(legend.position = "right") +
+  scale_x_continuous(name="", breaks=c(063, 263, 463),
+                     labels=c(500,300,100) )+
+  #coord_cartesian(xlim = c(373,550)) + #was 323
+  scale_fill_viridis_d(option = "H", name="Virus Family" ) +
+  geom_label_repel(data=cnodes, aes(x=x, y=y, label=ll), max.overlaps = Inf) +
+  geom_label_repel(data=singles, aes(x=x, y=y, label=host_class), max.overlaps = Inf)
+
+z
+ggsave("tree-figure/starting-tree-summed-nodes.pdf", width=8.5, height=11)
+
+```
+
+```{r}
+u + xlim(0,0)+
+  geom_point(data = summed, aes(x=x, y=y, fill=virus_family, size=Count), alpha=0.75, pch=23, position="jitter") +
+  geom_point(data= bigdf, aes(x=x+50, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
+  theme_tree2()+
+  theme(axis.title.x = element_text(size=14)) +
+  theme(legend.position = "right") +
+  scale_x_continuous(name="", breaks=c(063, 263, 463),
+                     labels=c(500,300,100) )+
+  #coord_cartesian(xlim = c(373,550)) + #was 323
+  scale_fill_viridis_d(option = "H", name="Virus Family" ) +
+#  geom_label_repel(data=cnodes, aes(x=x, y=y, label=ll), max.overlaps = Inf) +
+#  geom_label_repel(data=singles, aes(x=x, y=y, label=host_class), max.overlaps = Inf) +
+  facet_wrap(~virus_family) +
+  ylim(-20,max(t$data$y)+20)
+ggsave("tree-figure/faceted-trees.pdf", width=11, height=8.5)
+
+```
