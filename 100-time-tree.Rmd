@@ -333,6 +333,7 @@ z<-u + xlim(0,600)+
   scale_fill_viridis_d(option = "H", name="Virus Family" ) +
   geom_label_repel(data=cnodes, aes(x=x, y=y, label=ll), max.overlaps = Inf) +
   geom_label_repel(data=singles, aes(x=x, y=y, label=host_class), max.overlaps = Inf)
+  ylim(-20,max(t$data$y)+20)
 
 z
 ggsave("tree-figure/starting-tree-summed-nodes.pdf", width=8.5, height=11)
@@ -353,7 +354,7 @@ u + xlim(0,0)+
 #  geom_label_repel(data=cnodes, aes(x=x, y=y, label=ll), max.overlaps = Inf) +
 #  geom_label_repel(data=singles, aes(x=x, y=y, label=host_class), max.overlaps = Inf) +
   facet_wrap(~virus_family) +
-  ylim(-20,max(t$data$y)+20)
+  ylim(-10,max(t$data$y)+10)
 ggsave("tree-figure/faceted-trees.pdf", width=11, height=8.5)
 
 ```
