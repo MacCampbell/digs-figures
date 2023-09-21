@@ -1,0 +1,365 @@
+---
+title: "102-actual-final-tree"
+output: html_document
+date: "2023-09-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(ggtree)
+library(phytools)
+library(ggrepel)
+library(ggpubr)
+library(viridis)
+```
+
+Generate taxon list
+
+Correcting names from outputs/100/unresolved-names.txt
+Dropping those without NCBI taxonomy, but otherwise matching.    
+
+```{r}
+meta<-read_csv("data/actual-final-vertebrate-eves.csv")
+meta
+```
+
+```{r}
+organisms<-meta %>% dplyr::select(organism) %>% unique()
+organisms$organism<-gsub("_"," ",organisms$organism)
+write_tsv(organisms, col_names = FALSE, file="outputs/102/species-list-unedited.tsv")
+
+#toedit<-organisms %>% mutate(EditedName=organism)
+#write_tsv(toedit, col_names = FALSE, file="outputs/100/species-list-edited.tsv")
+edited<-read_tsv("outputs/102/species-list-edited.tsv", col_names = c("Species","edited"))
+write_tsv(edited %>% select(edited), col_names = FALSE, file="outputs/102/species-list-edited-for-timetree.tsv")
+```
+
+24 unresolved names     
+Equus ferus thistlecreek (not found in NCBI taxonomy)
+Nannopterum brasilianus (not found in NCBI taxonomy)
+Thylacine cynocephalus (not found in NCBI taxonomy)
+Equus burchellii boehmi (replaced with Equus quagga)
+Cebus capucinus imitator (no substitute found)
+Eidolon dupreanum (no substitute found)
+Ardeotis arabs (no substitute found)
+Phalacrocorax carbo (no substitute found)
+Eulemur fulvus (no substitute found)
+Bubo blakistoni (no substitute found)
+Eptesicus fuscus (no substitute found)
+Phalacrocorax harrisi (no substitute found)
+Pteropus pselaphon (no substitute found)
+Urile pelagicus (no substitute found)
+Eurynorhynchus pygmeus (no substitute found)
+Psittacula krameri (no substitute found)
+Cercopithecus albogularis (no substitute found)
+Anabarilius grahami (no substitute found)
+Oryzias melastigma (no substitute found)
+Hipposideros pendleburyi (no substitute found)
+Canis lupus dingo (no substitute found)
+Miniopterus schreibersii (no substitute found)
+Gopherus evgoodei (no substitute found)
+Nannopterum harrisi (no substitute found)
+
+(note, when redoing this on 08212023 I still had 709 unique names)
+(note, when redoing this on 09202023 I added 
+Acipenser ruthenus	Acipenser ruthenus      
+Sciurus vulgaris	Sciurus vulgaris       
+Dendropsophus ebraccatus	Dendropsophus ebraccatus)
+
+## Moving forward without resolving names
+
+```{r}
+data<-meta 
+data$Species<-gsub("_"," ",data$organism)
+data<-as_tibble(data) %>% left_join(edited)
+data$Species<-data$edited
+data$locus_name<-data$assigned_name
+list<-split(data, f=data$locus_name)
+data$Species<-gsub(" ","_",data$Species)
+```
+
+Species column has edited names. 
+```{r}
+writeList<-function(table) {
+  species<-as_tibble(unique(table$Species))
+  if(length(species$value) > 1) {
+  write_tsv(species, col_names = FALSE, paste0("outputs/102/lists/",unique(table$locus_name),".tsv"))
+  }
+}
+```
+
+This takes a while, so not evaluating unless intending to.     
+
+```{r, eval=FALSE}
+lapply(list, writeList)
+```
+
+
+## Tree   
+
+```{r}
+#tree<-read.tree("outputs/100/species-list-unedited.nwk")
+tree<-read.tree("outputs/102/species-list-edited-for-timetree.nwk")
+t<-ggtree(tree, color="grey50")
+```
+
+```{r}
+#Making tip ages = 0 
+t$data<-t$data %>% mutate(Age=max(x)-x)
+
+t + geom_tiplab(size=2) +
+  geom_treescale()+
+  xlim(0,600)+
+  geom_nodelab(aes(label=round(Age,2)), hjust=0, size=2)
+```
+
+```{r}
+#Making "Taxa" for tip labs and calculate number of taxa
+#Exlude unassigned "NK" locus_names
+#filter to tips in tree
+treetips<-t$data %>% filter(isTip==TRUE) %>% select(label)
+
+df<-data %>% filter(locus_name != "NK") %>% unique() %>%
+  mutate(Delim=gsub(" ","_",Species)) %>%
+  filter(Delim %in% treetips$label) %>%
+  group_by(locus_name) %>% mutate(Taxa=paste(Delim, collapse=" "))  %>% mutate(Count=n()) %>% #Ned to find loci occurring in > 1 species, not just > 1 in a species 
+  group_by(locus_name) %>% mutate(TaxonCount=length(unique(Species))) %>% ungroup() %>%
+  group_by(locus_name)
+
+
+
+#getting min age of nodes
+df2<-df %>% mutate(node = as.numeric(ifelse(Count > 1, findMRCA(tree, tips=strsplit(Taxa, " ")[[1]]), NA)))
+df3<-left_join(df2, t$data, by="node")
+df3$Age<-replace_na(df3$Age, 0)
+
+df3 <- df3 %>% mutate(NewAge=ifelse(TaxonCount > 1, Age, 0))
+
+#Summarize min age of nodes
+df3 %>% select(locus_name, Age, NewAge) %>% unique() %>% arrange(-Age, NewAge)
+
+df3<-df3 %>% select(-Age) %>% rename(Age=NewAge)
+#Check to make sure some loci with >1 occurrence in 1 organism don't have duplicates treated as loci with old ages
+df %>% filter(Species=="Eptatretus_burgeri") %>% select(Species, Count, TaxonCount)
+df3 %>% filter(Species=="Eptatretus_burgeri") %>% select(Species, Count, TaxonCount, Age)
+```
+
+```{r}
+annotations<-df3 %>% select(locus_name, node, Age, x, y, tax_class, virus_family, virus_genus) %>% unique()
+
+minAges<-annotations %>% rename(MinimumAge=Age) %>% select(virus_genus, locus_name, MinimumAge, tax_class)
+
+write_csv(minAges, "outputs/102/min-ages.csv")
+write_csv(minAges %>% arrange(-MinimumAge), "tree-figure/min-ages.csv")
+
+minAges %>% arrange(-MinimumAge)
+```
+
+
+Annotating tree
+
+```{r}
+fact<-8
+bigdf<-left_join(data, t$data, by=c("Species"="label"))  %>%
+  drop_na() %>% #Some species not in timetree, subspecies added to newick string where appropriate
+  select(Species, organism, virus_family, virus_genus, x, y, locus_name) %>%
+  unique() %>% select(-locus_name) %>% 
+  group_by(Species, organism, virus_family, virus_genus, x, y) %>%
+  summarize(Count=n()) %>%
+  unique() %>%
+   mutate(newX = ifelse(virus_family=="Alloherpesviridae", x+fact,
+                ifelse(virus_family=="Herpesviridae", x+2*fact,
+                ifelse(virus_family=="Bornaviridae", x+3*fact,
+                ifelse(virus_family=="Chuviridae", x+4*fact,
+                ifelse(virus_family=="Circoviridae", x+5*fact,
+                ifelse(virus_family=="Filoviridae", x+6*fact,
+                ifelse(virus_family=="Flaviviridae", x+7*fact,
+                ifelse(virus_family=="Hepadnaviridae", x+8*fact,
+                ifelse(virus_family=="Paramyxoviridae", x+9*fact,
+                ifelse(virus_family=="Parvoviridae", x+10*fact))))))))))) %>%
+  filter(virus_family != "Retroelement")
+
+bigdf$virus_family<-factor(bigdf$virus_family, levels=c( "Alloherpesviridae","Herpesviridae", "Bornaviridae","Chuviridae","Circoviridae",
+                                                         "Filoviridae","Flaviviridae","Hepadnaviridae","Paramyxoviridae","Parvoviridae"))
+
+bigdf
+```
+
+```{r}
+nodes<-filter(annotations %>% select(-tax_class) %>% unique(), node != "NA")
+
+nodes$virus_family<-factor(nodes$virus_family, levels=c( "Alloherpesviridae","Herpesviridae", "Bornaviridae","Chuviridae","Circoviridae",
+                                                         "Filoviridae","Flaviviridae","Hepadnaviridae","Paramyxoviridae","Parvoviridae"))
+
+tips<-filter(annotations, Age == 0)
+tipSpecies<-df3 %>% filter(locus_name %in% tips$locus_name)
+
+
+v<-t + xlim(0,600)+
+  geom_point(data = nodes, aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
+  geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
+  theme_tree2()+
+  theme(axis.title.x = element_text(size=14)) +
+  theme(legend.position = "right") +
+  scale_x_continuous(name="", breaks=c(063, 263, 463),
+                     labels=c(500,300,100) )+
+  #coord_cartesian(xlim = c(373,550)) + #was 323
+  scale_fill_viridis_d(option = "H", name="Virus Family" ) 
+
+v
+
+ggsave("tree-figure/starting-tree.pdf", width=12, height=24)
+```
+
+
+## Label clades
+
+```{r}
+ddf<-data
+dddf<-ddf %>% filter(organism %in% tree$tip.label)
+
+findMeANode<-function(Taxon) {
+  species <- dplyr::filter(dddf, tax_class == Taxon)
+  speciesNode <- findMRCA(tree, tips=species$organism)
+  return(speciesNode)
+}
+
+findMeANode("Aves")
+```
+
+```{r}
+classes<-dddf %>% ungroup %>% select(tax_class) %>% unique()
+cvector<-dddf$tax_class %>% unique()
+
+cnodes<-lapply(cvector, findMeANode)
+```
+
+```{r}
+cnodes[sapply(cnodes, is.null)] <- NA
+
+n<-as_tibble(as.vector(unlist(cnodes)))
+
+cladelabels<-bind_cols(classes,n) %>% filter(value != "NA") %>% unique() %>% filter(tax_class!="Unclassified")
+cladetips<-bind_cols(classes,n)
+cladetips<-cladetips[is.na(cladetips$value),]
+
+ctips<-dddf  %>% filter(tax_class %in% cladetips$tax_class) %>% rename(label=Species) %>% left_join(t$data)
+
+nn<-cladelabels$value
+ll<-cladelabels$tax_class
+off<-42
+```
+
+
+```{r}
+x<-t + xlim(0,600)+
+  geom_point(data = nodes %>% filter(Age !=0), aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
+  geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
+  theme_tree2()+
+  theme(axis.title.x = element_text(size=14)) +
+  theme(legend.position = "right") +
+  scale_x_continuous(name="", breaks=c(063, 263, 463),
+                     labels=c(500,300,100) )+
+  #coord_cartesian(xlim = c(373,550)) + #was 323
+  scale_fill_viridis_d(option = "H", name="Virus Family" )+
+  geom_text(data=ctips, aes(y=y, x=x+9*fact, label=tax_class, hjust=0)) +
+    geom_cladelabel(nn[1],ll[1], offset=off) +
+    geom_cladelabel(nn[2],ll[2], offset=off) +
+    geom_cladelabel(nn[3],ll[3], offset=off) +
+    geom_cladelabel(nn[4],ll[4], offset=off) +
+    geom_cladelabel(nn[5],ll[5], offset=off) +
+    geom_cladelabel(nn[6],ll[6], offset=off) 
+
+x
+
+ggsave("outputs/102/starting-tree-with-clade-labels.pdf", width=12, height=24)
+
+```
+
+
+node label version    
+
+```{r}
+nnn<-cbind(nn,ll) %>% as_tibble()
+nnn$nn<-as.integer(nnn$nn)
+cnodes<-t$data %>% filter(node %in% cnodes) %>% left_join(nnn, by=c("node"="nn"))
+cnodes
+```
+
+```{r}
+singles<-ctips %>% select(parent, tax_class) %>% rename(single=parent) %>% left_join(t$data, by=c("single"="node"))
+singles
+```
+
+
+```{r}
+y<-t + xlim(0,600)+
+  geom_point(data = nodes %>% filter(Age !=0), aes(x=x, y=y, fill=virus_family), size=3, alpha=0.75, pch=23, position = "jitter") +
+  geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
+  theme_tree2()+
+  theme(axis.title.x = element_text(size=14)) +
+  theme(legend.position = "right") +
+  scale_x_continuous(name="", breaks=c(063, 263, 463),
+                     labels=c(500,300,100) )+
+  #coord_cartesian(xlim = c(373,550)) + #was 323
+  scale_fill_viridis_d(option = "H", name="Virus Family" ) +
+  geom_label_repel(data=cnodes, aes(x=x, y=y, label=ll), max.overlaps = Inf) +
+  geom_label_repel(data=singles, aes(x=x, y=y, label=tax_class), max.overlaps = Inf)
+
+y
+ggsave("tree-figure/starting-tree-with-node-labels.pdf", width=12, height=24)
+
+```
+
+
+Make nodes proportional to occurrences
+```{r}
+summed<-nodes %>% filter(Age !=0) %>% ungroup() %>% group_by(virus_family, node, Age, x, y) %>% summarize(Count=n())
+
+u<-ggtree(tree, color="grey50", size=0.25)
+
+```
+
+```{r}
+z<-u + xlim(0,600)+
+  geom_point(data = summed, aes(x=x, y=y, fill=virus_family, size=Count), alpha=0.75, pch=23, position="jitter") +
+  geom_point(data= bigdf, aes(x=newX, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
+  theme_tree2()+
+  theme(axis.title.x = element_text(size=14)) +
+  theme(legend.position = "right") +
+  scale_x_continuous(name="", breaks=c(063, 263, 463),
+                     labels=c(500,300,100) )+
+  #coord_cartesian(xlim = c(373,550)) + #was 323
+  scale_fill_viridis_d(option = "H", name="Virus Family" ) +
+#  geom_label_repel(data=cnodes, aes(x=x, y=y, label=ll), max.overlaps = Inf) +
+#  geom_label_repel(data=singles, aes(x=x, y=y, label=tax_class), max.overlaps = Inf) +
+  ylim(1,max(t$data$y)+1)
+
+z
+ggsave("tree-figure/starting-tree-summed-nodes.pdf", width=8.5, height=11)
+
+```
+
+```{r}
+u + xlim(0,0)+
+  geom_point(data = summed, aes(x=x, y=y, fill=virus_family, size=Count), alpha=0.75, pch=23, position="jitter") +
+  geom_point(data= bigdf, aes(x=x+50, y=y, fill=virus_family, size=Count), alpha=0.75, pch=21) +
+  theme_tree2()+
+  theme(axis.title.x = element_text(size=14)) +
+  theme(legend.position = "right") +
+  scale_x_continuous(name="", breaks=c(063, 263, 463),
+                     labels=c(500,300,100) )+
+  #coord_cartesian(xlim = c(373,550)) + #was 323
+  scale_fill_viridis_d(option = "H", name="Virus Family" ) +
+#  geom_label_repel(data=cnodes, aes(x=x, y=y, label=ll), max.overlaps = Inf) +
+#  geom_label_repel(data=singles, aes(x=x, y=y, label=tax_class), max.overlaps = Inf) +
+  facet_wrap(~virus_family) +
+  ylim(-10,max(t$data$y)+10)
+ggsave("tree-figure/faceted-trees.pdf", width=11, height=8.5)
+
+```
